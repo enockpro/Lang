@@ -215,15 +215,14 @@ socket.on('user-joined', async (data) => {
     if (remoteUserId !== userId) {
         connectionStatus.textContent = `User ${remoteUserId.substring(0, 8)}... joined! Creating connection...`;
         
+        // Only create offer if we are the existing user (initiator)
+        // New users will wait for offers and respond with answers
         if (isInitiator) {
             // We are the existing user - create offer for the new user
             await createPeerConnection(remoteUserId);
             await createOffer(remoteUserId);
-        } else {
-            // We are the new user - create offer for existing user
-            await createPeerConnection(remoteUserId);
-            await createOffer(remoteUserId);
         }
+        // If we are the new user, we'll receive offers and respond with answers
     }
 });
 
@@ -235,11 +234,14 @@ socket.on('user-left', (data) => {
 
 socket.on('offer', async (data) => {
     const { offer, fromUserId } = data;
-    await createPeerConnection(fromUserId);
-    await peerConnections.get(fromUserId).setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnections.get(fromUserId).createAnswer();
-    await peerConnections.get(fromUserId).setLocalDescription(answer);
-    socket.emit('answer', { answer, roomId, toUserId: fromUserId });
+    if (!peerConnections.has(fromUserId)) {
+        await createPeerConnection(fromUserId);
+    }
+    const peerConnection = peerConnections.get(fromUserId);
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('answer', { answer, roomId, toUserId: fromUserId, fromUserId: userId });
 });
 
 socket.on('answer', async (data) => {
