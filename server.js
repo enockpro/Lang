@@ -89,15 +89,45 @@ io.on('connection', (socket) => {
     });
 
     socket.on('offer', (data) => {
-        socket.to(data.roomId).emit('offer', data.offer);
+        const { offer, roomId, toUserId, fromUserId } = data;
+        const room = rooms.get(roomId);
+        if (room) {
+            const targetUser = room.users.find(u => u.userId === toUserId);
+            if (targetUser) {
+                io.to(targetUser.socketId).emit('offer', {
+                    offer,
+                    fromUserId
+                });
+            }
+        }
     });
 
     socket.on('answer', (data) => {
-        socket.to(data.roomId).emit('answer', data.answer);
+        const { answer, roomId, toUserId, fromUserId } = data;
+        const room = rooms.get(roomId);
+        if (room) {
+            const targetUser = room.users.find(u => u.userId === toUserId);
+            if (targetUser) {
+                io.to(targetUser.socketId).emit('answer', {
+                    answer,
+                    fromUserId
+                });
+            }
+        }
     });
 
     socket.on('ice-candidate', (data) => {
-        socket.to(data.roomId).emit('ice-candidate', data.candidate);
+        const { candidate, roomId, toUserId, fromUserId } = data;
+        const room = rooms.get(roomId);
+        if (room) {
+            const targetUser = room.users.find(u => u.userId === toUserId);
+            if (targetUser) {
+                io.to(targetUser.socketId).emit('ice-candidate', {
+                    candidate,
+                    fromUserId
+                });
+            }
+        }
     });
 
     socket.on('translate-request', async (data) => {
@@ -149,18 +179,21 @@ io.on('connection', (socket) => {
         });
     });
 
-    socket.on('leave-room', (roomId) => {
+    socket.on('leave-room', (data) => {
+        const { roomId, userId } = data;
         socket.leave(roomId);
         const room = rooms.get(roomId);
         if (room) {
+            const leavingUser = room.users.find(u => u.socketId === socket.id);
             room.users = room.users.filter(u => u.socketId !== socket.id);
             if (room.users.length === 0) {
                 rooms.delete(roomId);
             } else {
-                socket.to(roomId).emit('user-left');
+                // Notify other users that this user left
+                socket.to(roomId).emit('user-left', { userId });
             }
         }
-        console.log(`User ${socket.id} left room ${roomId}`);
+        console.log(`User ${userId || socket.id} left room ${roomId}`);
     });
 
     socket.on('disconnect', () => {

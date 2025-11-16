@@ -1,7 +1,5 @@
 // WebRTC and Socket.io setup
 let localStream = null;
-let remoteStream = null;
-let peerConnection = null;
 let socket = null;
 let recognition = null;
 let synthesis = null;
@@ -10,6 +8,8 @@ let audioEnabled = true;
 let userLanguage = 'en';
 let roomId = '';
 let userId = '';
+let peerConnections = new Map(); // userId -> RTCPeerConnection
+let remoteStreams = new Map(); // userId -> MediaStream
 
 // Socket.io connection
 const socketUrl = window.location.origin;
@@ -30,7 +30,7 @@ const roomLinkInput = document.getElementById('roomLink');
 const shareableLinkInput = document.getElementById('shareableLink');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 const localVideo = document.getElementById('localVideo');
-const remoteVideo = document.getElementById('remoteVideo');
+const remoteVideosContainer = document.getElementById('remoteVideosContainer');
 const muteBtn = document.getElementById('muteBtn');
 const videoBtn = document.getElementById('videoBtn');
 const audioBtn = document.getElementById('audioBtn');
@@ -49,8 +49,9 @@ const rtcConfiguration = {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Generate user ID
+    // Generate unique user ID based on device/browser
     userId = generateUserId();
+    console.log('User ID:', userId);
     
     // Tab switching
     createTabBtn.addEventListener('click', () => switchTab('create'));
@@ -89,9 +90,12 @@ function switchTab(tab) {
     }
 }
 
-// Generate user ID
+// Generate unique user ID based on device
 function generateUserId() {
-    return 'user_' + Math.random().toString(36).substring(2, 11);
+    // Use a combination of timestamp and random to ensure uniqueness
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 11);
+    return `user_${timestamp}_${random}`;
 }
 
 // Generate room ID
@@ -105,7 +109,7 @@ async function createRoom() {
     roomId = generateRoomId();
 
     try {
-        // Get user media
+        // Request camera/microphone - this ensures each device is treated separately
         localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: true
@@ -162,7 +166,7 @@ async function joinRoom() {
     userLanguage = joinLanguageSelect.value;
 
     try {
-        // Get user media
+        // Request camera/microphone - each device gets its own stream
         localStream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: true
@@ -206,41 +210,57 @@ function copyRoomLink() {
 
 // Socket event handlers
 socket.on('user-joined', async (data) => {
-    if (data.userId !== userId) {
-        connectionStatus.textContent = 'Partner joined! Creating connection...';
-        await createPeerConnection();
-        if (data.isInitiator) {
-            await createOffer();
+    const { userId: remoteUserId, isInitiator } = data;
+    
+    if (remoteUserId !== userId) {
+        connectionStatus.textContent = `User ${remoteUserId.substring(0, 8)}... joined! Creating connection...`;
+        
+        if (isInitiator) {
+            // We are the existing user - create offer for the new user
+            await createPeerConnection(remoteUserId);
+            await createOffer(remoteUserId);
+        } else {
+            // We are the new user - create offer for existing user
+            await createPeerConnection(remoteUserId);
+            await createOffer(remoteUserId);
         }
     }
 });
 
-socket.on('offer', async (offer) => {
-    await createPeerConnection();
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit('answer', { answer, roomId });
+socket.on('user-left', (data) => {
+    const { userId: leftUserId } = data;
+    removeRemoteUser(leftUserId);
+    updateConnectionStatus();
+});
+
+socket.on('offer', async (data) => {
+    const { offer, fromUserId } = data;
+    await createPeerConnection(fromUserId);
+    await peerConnections.get(fromUserId).setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await peerConnections.get(fromUserId).createAnswer();
+    await peerConnections.get(fromUserId).setLocalDescription(answer);
+    socket.emit('answer', { answer, roomId, toUserId: fromUserId });
 });
 
 socket.on('answer', async (data) => {
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+    const { answer, fromUserId } = data;
+    const peerConnection = peerConnections.get(fromUserId);
+    if (peerConnection) {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    }
 });
 
-socket.on('ice-candidate', async (candidate) => {
+socket.on('ice-candidate', async (data) => {
+    const { candidate, fromUserId } = data;
+    const peerConnection = peerConnections.get(fromUserId);
     if (peerConnection) {
         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
     }
 });
 
-socket.on('user-left', () => {
-    connectionStatus.textContent = 'Partner left the call';
-    endCall();
-});
-
-socket.on('translation', async (data) => {
+socket.on('translation-result', async (data) => {
     // Receive translated text from other user
-    if (data.userId !== userId && data.translatedText) {
+    if (data.targetUserId === userId && data.translatedText) {
         translatedText.textContent = data.translatedText;
         // Speak the translation in user's language
         if (audioEnabled) {
@@ -249,9 +269,13 @@ socket.on('translation', async (data) => {
     }
 });
 
-// Create peer connection
-async function createPeerConnection() {
-    peerConnection = new RTCPeerConnection(rtcConfiguration);
+// Create peer connection for a specific user
+async function createPeerConnection(remoteUserId) {
+    if (peerConnections.has(remoteUserId)) {
+        return; // Already connected
+    }
+
+    const peerConnection = new RTCPeerConnection(rtcConfiguration);
 
     // Add local stream tracks
     localStream.getTracks().forEach(track => {
@@ -260,28 +284,97 @@ async function createPeerConnection() {
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {
-        remoteStream = event.streams[0];
-        remoteVideo.srcObject = remoteStream;
-        connectionStatus.textContent = 'Connected';
+        const remoteStream = event.streams[0];
+        remoteStreams.set(remoteUserId, remoteStream);
+        addRemoteVideo(remoteUserId, remoteStream);
+        updateConnectionStatus();
     };
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-            socket.emit('ice-candidate', { candidate: event.candidate, roomId });
+            socket.emit('ice-candidate', {
+                candidate: event.candidate,
+                roomId,
+                toUserId: remoteUserId
+            });
         }
     };
 
     peerConnection.onconnectionstatechange = () => {
-        connectionStatus.textContent = `Connection: ${peerConnection.connectionState}`;
+        console.log(`Connection with ${remoteUserId}: ${peerConnection.connectionState}`);
+        if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+            removeRemoteUser(remoteUserId);
+        }
+        updateConnectionStatus();
     };
+
+    peerConnections.set(remoteUserId, peerConnection);
 }
 
-// Create offer
-async function createOffer() {
+// Create offer for a specific user
+async function createOffer(remoteUserId) {
+    const peerConnection = peerConnections.get(remoteUserId);
+    if (!peerConnection) return;
+
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
-    socket.emit('offer', { offer, roomId });
+    socket.emit('offer', { offer, roomId, toUserId: remoteUserId, fromUserId: userId });
+}
+
+// Add remote video element
+function addRemoteVideo(remoteUserId, stream) {
+    // Remove existing video if any
+    const existingVideo = document.getElementById(`video-${remoteUserId}`);
+    if (existingVideo) {
+        existingVideo.remove();
+    }
+
+    const videoWrapper = document.createElement('div');
+    videoWrapper.className = 'video-wrapper';
+    videoWrapper.id = `video-wrapper-${remoteUserId}`;
+
+    const video = document.createElement('video');
+    video.id = `video-${remoteUserId}`;
+    video.autoplay = true;
+    video.playsinline = true;
+    video.srcObject = stream;
+
+    const label = document.createElement('div');
+    label.className = 'video-label';
+    label.textContent = `User ${remoteUserId.substring(0, 8)}...`;
+
+    videoWrapper.appendChild(video);
+    videoWrapper.appendChild(label);
+    remoteVideosContainer.appendChild(videoWrapper);
+}
+
+// Remove remote user
+function removeRemoteUser(remoteUserId) {
+    // Close peer connection
+    const peerConnection = peerConnections.get(remoteUserId);
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnections.delete(remoteUserId);
+    }
+
+    // Remove video element
+    const videoWrapper = document.getElementById(`video-wrapper-${remoteUserId}`);
+    if (videoWrapper) {
+        videoWrapper.remove();
+    }
+
+    remoteStreams.delete(remoteUserId);
+}
+
+// Update connection status
+function updateConnectionStatus() {
+    const connectedCount = peerConnections.size;
+    if (connectedCount === 0) {
+        connectionStatus.textContent = 'Waiting for others to join...';
+    } else {
+        connectionStatus.textContent = `Connected with ${connectedCount} user${connectedCount > 1 ? 's' : ''}`;
+    }
 }
 
 // Initialize text-to-speech
@@ -338,7 +431,7 @@ function startSpeechRecognition() {
         if (finalTranscript) {
             const text = finalTranscript.trim();
             originalText.textContent = text;
-            // Translate and send to other users
+            // Translate and broadcast to all other users
             await translateAndBroadcast(text);
         } else if (interimTranscript) {
             originalText.textContent = interimTranscript;
@@ -371,12 +464,11 @@ function startSpeechRecognition() {
     isRecognizing = true;
 }
 
-// Translate text and broadcast to other users
+// Translate text and broadcast to all other users
 async function translateAndBroadcast(text) {
     if (!text.trim()) return;
 
     try {
-        // Get all users in room and translate for each
         socket.emit('translate-request', {
             roomId,
             userId,
@@ -387,17 +479,6 @@ async function translateAndBroadcast(text) {
         console.error('Translation error:', error);
     }
 }
-
-// Handle incoming translations
-socket.on('translation-result', async (data) => {
-    if (data.targetUserId === userId && data.translatedText) {
-        translatedText.textContent = data.translatedText;
-        // Speak the translation
-        if (audioEnabled) {
-            speakText(data.translatedText, userLanguage);
-        }
-    }
-});
 
 // Get language code for speech recognition and TTS
 function getLanguageCode(lang) {
@@ -468,20 +549,22 @@ function endCall() {
         synthesis.cancel();
     }
 
+    // Close all peer connections
+    peerConnections.forEach((peerConnection, remoteUserId) => {
+        peerConnection.close();
+        removeRemoteUser(remoteUserId);
+    });
+    peerConnections.clear();
+    remoteStreams.clear();
+
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
 
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-
     localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
 
-    socket.emit('leave-room', roomId);
+    socket.emit('leave-room', { roomId, userId });
 
     setupSection.classList.remove('hidden');
     callSection.classList.add('hidden');
