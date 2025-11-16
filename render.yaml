@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: multilingual-video-call
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+
+
+

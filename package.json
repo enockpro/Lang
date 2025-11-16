@@ -1,0 +1,29 @@
+{
+  "name": "multilingual-video-call",
+  "version": "1.0.0",
+  "description": "Real-time multilingual video call application with Gemini AI translation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "webrtc",
+    "video-call",
+    "translation",
+    "gemini",
+    "multilingual"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.2.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+

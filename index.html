@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multilingual Video Call - Real-time Translation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Multilingual Video Call</h1>
+            <p class="subtitle">Real-time translation powered by Gemini AI</p>
+        </header>
+
+        <div class="setup-section" id="setupSection">
+            <div class="card">
+                <h2>Join Call</h2>
+                <div class="form-group">
+                    <label for="roomId">Room ID:</label>
+                    <input type="text" id="roomId" placeholder="Enter or create room ID" value="">
+                </div>
+                <div class="form-group">
+                    <label for="userLanguage">Your Language:</label>
+                    <select id="userLanguage">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ar">Arabic</option>
+                        <option value="hi">Hindi</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="partnerLanguage">Partner's Language:</label>
+                    <select id="partnerLanguage">
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ar">Arabic</option>
+                        <option value="hi">Hindi</option>
+                    </select>
+                </div>
+                <button id="joinBtn" class="btn btn-primary">Join Call</button>
+            </div>
+        </div>
+
+        <div class="call-section hidden" id="callSection">
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="video-label">You</div>
+                </div>
+                <div class="video-wrapper">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="video-label">Partner</div>
+                </div>
+            </div>
+
+            <div class="translation-panel">
+                <div class="translation-box">
+                    <h3>Original Speech</h3>
+                    <div id="originalText" class="translation-text"></div>
+                </div>
+                <div class="translation-box">
+                    <h3>Translated Text</h3>
+                    <div id="translatedText" class="translation-text"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="muteBtn" class="btn btn-control">
+                    <span class="icon">🔇</span>
+                    <span>Mute</span>
+                </button>
+                <button id="videoBtn" class="btn btn-control">
+                    <span class="icon">📹</span>
+                    <span>Video</span>
+                </button>
+                <button id="endCallBtn" class="btn btn-danger">
+                    <span class="icon">📞</span>
+                    <span>End Call</span>
+                </button>
+            </div>
+
+            <div class="status">
+                <span id="connectionStatus">Connecting...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
