@@ -11,7 +11,11 @@ const io = socketIo(server);
 
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+
+// Serve static files (CSS, JS, etc.)
+app.use(express.static(path.join(__dirname), {
+    index: false // Don't serve index.html automatically, we'll handle it explicitly
+}));
 
 // Initialize Gemini AI
 let genAI = null;
@@ -138,6 +142,15 @@ app.post('/api/translate', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', geminiConfigured: !!genAI });
+});
+
+// Serve index.html for all non-API routes (SPA routing)
+app.get('*', (req, res) => {
+    // Don't serve index.html for API routes or socket.io
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+        return res.status(404).json({ error: 'Not found' });
+    }
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start server (for Render, Railway, and local development)
