@@ -3,62 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multilingual Video Call - Real-time Translation</title>
+    <title>Multilingual Video Call - Real-time Voice Translation</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🌐 Multilingual Video Call</h1>
-            <p class="subtitle">Real-time translation powered by Gemini AI</p>
+            <p class="subtitle">Real-time voice translation - Speak your language, hear theirs</p>
         </header>
 
         <div class="setup-section" id="setupSection">
             <div class="card">
-                <h2>Join Call</h2>
-                <div class="form-group">
-                    <label for="roomId">Room ID:</label>
-                    <input type="text" id="roomId" placeholder="Enter or create room ID" value="">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" id="createTabBtn">Create Room</button>
+                    <button class="tab-btn" id="joinTabBtn">Join Room</button>
                 </div>
-                <div class="form-group">
-                    <label for="userLanguage">Your Language:</label>
-                    <select id="userLanguage">
-                        <option value="en">English</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="it">Italian</option>
-                        <option value="pt">Portuguese</option>
-                        <option value="ru">Russian</option>
-                        <option value="ja">Japanese</option>
-                        <option value="ko">Korean</option>
-                        <option value="zh">Chinese</option>
-                        <option value="ar">Arabic</option>
-                        <option value="hi">Hindi</option>
-                    </select>
+
+                <!-- Create Room Tab -->
+                <div class="tab-content active" id="createTab">
+                    <h2>Create a New Room</h2>
+                    <div class="form-group">
+                        <label for="createLanguage">Your Language (You'll hear translations in this language):</label>
+                        <select id="createLanguage">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="it">Italian</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="ru">Russian</option>
+                            <option value="ja">Japanese</option>
+                            <option value="ko">Korean</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ar">Arabic</option>
+                            <option value="hi">Hindi</option>
+                        </select>
+                    </div>
+                    <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
                 </div>
-                <div class="form-group">
-                    <label for="partnerLanguage">Partner's Language:</label>
-                    <select id="partnerLanguage">
-                        <option value="en">English</option>
-                        <option value="es">Spanish</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="it">Italian</option>
-                        <option value="pt">Portuguese</option>
-                        <option value="ru">Russian</option>
-                        <option value="ja">Japanese</option>
-                        <option value="ko">Korean</option>
-                        <option value="zh">Chinese</option>
-                        <option value="ar">Arabic</option>
-                        <option value="hi">Hindi</option>
-                    </select>
+
+                <!-- Join Room Tab -->
+                <div class="tab-content" id="joinTab">
+                    <h2>Join a Room</h2>
+                    <div class="form-group">
+                        <label for="roomLink">Room Link:</label>
+                        <input type="text" id="roomLink" placeholder="Paste room link here">
+                    </div>
+                    <div class="form-group">
+                        <label for="joinLanguage">Your Language (You'll hear translations in this language):</label>
+                        <select id="joinLanguage">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="it">Italian</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="ru">Russian</option>
+                            <option value="ja">Japanese</option>
+                            <option value="ko">Korean</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ar">Arabic</option>
+                            <option value="hi">Hindi</option>
+                        </select>
+                    </div>
+                    <button id="joinRoomBtn" class="btn btn-primary">Join Room</button>
                 </div>
-                <button id="joinBtn" class="btn btn-primary">Join Call</button>
             </div>
         </div>
 
         <div class="call-section hidden" id="callSection">
+            <div class="room-info">
+                <div class="room-link-container">
+                    <label>Share this room link:</label>
+                    <div class="link-input-group">
+                        <input type="text" id="shareableLink" readonly>
+                        <button id="copyLinkBtn" class="btn btn-small">Copy</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="video-container">
                 <div class="video-wrapper">
                     <video id="localVideo" autoplay muted playsinline></video>
@@ -72,11 +96,11 @@
 
             <div class="translation-panel">
                 <div class="translation-box">
-                    <h3>Original Speech</h3>
+                    <h3>What You Said</h3>
                     <div id="originalText" class="translation-text"></div>
                 </div>
                 <div class="translation-box">
-                    <h3>Translated Text</h3>
+                    <h3>Translation (in your language)</h3>
                     <div id="translatedText" class="translation-text"></div>
                 </div>
             </div>
@@ -89,6 +113,10 @@
                 <button id="videoBtn" class="btn btn-control">
                     <span class="icon">📹</span>
                     <span>Video</span>
+                </button>
+                <button id="audioBtn" class="btn btn-control">
+                    <span class="icon">🔊</span>
+                    <span>Audio On</span>
                 </button>
                 <button id="endCallBtn" class="btn btn-danger">
                     <span class="icon">📞</span>
@@ -106,4 +134,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-

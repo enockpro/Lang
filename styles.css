@@ -43,6 +43,43 @@ header h1 {
     margin: 0 auto;
 }
 
+.tab-buttons {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-btn:hover {
+    color: #667eea;
+}
+
+.tab-btn.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
 .form-group {
     margin-bottom: 20px;
 }
@@ -116,6 +153,16 @@ header h1 {
     transform: translateY(-2px);
 }
 
+.btn-small {
+    padding: 8px 16px;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.btn-small:hover {
+    transform: none;
+}
+
 .hidden {
     display: none !important;
 }
@@ -125,6 +172,34 @@ header h1 {
     border-radius: 15px;
     padding: 30px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.room-info {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.room-link-container label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #555;
+}
+
+.link-input-group {
+    display: flex;
+    gap: 10px;
+}
+
+.link-input-group input {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
 }
 
 .video-container {

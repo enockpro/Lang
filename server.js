@@ -7,7 +7,12 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 // Middleware
 app.use(express.json());
@@ -41,26 +46,46 @@ const languageMap = {
     'hi': 'Hindi'
 };
 
-// Store active rooms
-const rooms = new Map();
+// Store active rooms with user info
+const rooms = new Map(); // roomId -> { users: [{ socketId, userId, language }] }
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('join-room', (roomId) => {
+    socket.on('join-room', (data) => {
+        const { roomId, userId, language } = data;
         socket.join(roomId);
+        
         const room = rooms.get(roomId) || { users: [] };
-        room.users.push(socket.id);
-        rooms.set(roomId, room);
-
-        // Notify other users in the room
-        const otherUsers = room.users.filter(id => id !== socket.id);
-        if (otherUsers.length > 0) {
-            socket.to(roomId).emit('user-joined');
+        const existingUserIndex = room.users.findIndex(u => u.socketId === socket.id);
+        
+        if (existingUserIndex === -1) {
+            room.users.push({ socketId: socket.id, userId, language });
+            rooms.set(roomId, room);
+        } else {
+            // Update existing user
+            room.users[existingUserIndex].userId = userId;
+            room.users[existingUserIndex].language = language;
         }
 
-        console.log(`User ${socket.id} joined room ${roomId}`);
+        // Notify other users in the room
+        const otherUsers = room.users.filter(u => u.socketId !== socket.id);
+        if (otherUsers.length > 0) {
+            socket.to(roomId).emit('user-joined', {
+                userId,
+                isInitiator: false
+            });
+            // Notify the new user about existing users
+            otherUsers.forEach(otherUser => {
+                socket.emit('user-joined', {
+                    userId: otherUser.userId,
+                    isInitiator: true
+                });
+            });
+        }
+
+        console.log(`User ${userId} (${socket.id}) joined room ${roomId} with language ${language}`);
     });
 
     socket.on('offer', (data) => {
@@ -75,11 +100,60 @@ io.on('connection', (socket) => {
         socket.to(data.roomId).emit('ice-candidate', data.candidate);
     });
 
+    socket.on('translate-request', async (data) => {
+        const { roomId, userId, text, sourceLanguage } = data;
+        const room = rooms.get(roomId);
+        
+        if (!room) {
+            return;
+        }
+
+        // Get all other users in the room
+        const otherUsers = room.users.filter(u => u.userId !== userId);
+        
+        if (otherUsers.length === 0) {
+            return;
+        }
+
+        // Translate for each user in their preferred language
+        const translationPromises = otherUsers.map(async (user) => {
+            try {
+                const translatedText = await translateText(text, sourceLanguage, user.language);
+                return {
+                    targetUserId: user.userId,
+                    translatedText
+                };
+            } catch (error) {
+                console.error(`Translation error for user ${user.userId}:`, error);
+                return {
+                    targetUserId: user.userId,
+                    translatedText: null
+                };
+            }
+        });
+
+        const translations = await Promise.all(translationPromises);
+        
+        // Send translations to each user
+        translations.forEach(translation => {
+            if (translation.translatedText) {
+                const targetUser = otherUsers.find(u => u.userId === translation.targetUserId);
+                if (targetUser) {
+                    io.to(targetUser.socketId).emit('translation-result', {
+                        targetUserId: translation.targetUserId,
+                        translatedText: translation.translatedText,
+                        sourceUserId: userId
+                    });
+                }
+            }
+        });
+    });
+
     socket.on('leave-room', (roomId) => {
         socket.leave(roomId);
         const room = rooms.get(roomId);
         if (room) {
-            room.users = room.users.filter(id => id !== socket.id);
+            room.users = room.users.filter(u => u.socketId !== socket.id);
             if (room.users.length === 0) {
                 rooms.delete(roomId);
             } else {
@@ -93,8 +167,9 @@ io.on('connection', (socket) => {
         console.log('User disconnected:', socket.id);
         // Clean up rooms
         for (const [roomId, room] of rooms.entries()) {
-            if (room.users.includes(socket.id)) {
-                room.users = room.users.filter(id => id !== socket.id);
+            const userIndex = room.users.findIndex(u => u.socketId === socket.id);
+            if (userIndex !== -1) {
+                room.users.splice(userIndex, 1);
                 if (room.users.length > 0) {
                     socket.to(roomId).emit('user-left');
                 } else {
@@ -105,22 +180,25 @@ io.on('connection', (socket) => {
     });
 });
 
-// Translation API endpoint
-app.post('/api/translate', async (req, res) => {
+// Translate text using Gemini API
+async function translateText(text, sourceLanguage, targetLanguage) {
+    if (!text || !sourceLanguage || !targetLanguage) {
+        throw new Error('Missing required parameters');
+    }
+
+    if (!genAI) {
+        throw new Error('Gemini API not configured');
+    }
+
+    // If same language, return original text
+    if (sourceLanguage === targetLanguage) {
+        return text;
+    }
+
+    const sourceLangName = languageMap[sourceLanguage] || 'English';
+    const targetLangName = languageMap[targetLanguage] || 'English';
+
     try {
-        const { text, sourceLanguage, targetLanguage } = req.body;
-
-        if (!text || !sourceLanguage || !targetLanguage) {
-            return res.status(400).json({ error: 'Missing required parameters' });
-        }
-
-        if (!genAI) {
-            return res.status(500).json({ error: 'Gemini API not configured' });
-        }
-
-        const sourceLangName = languageMap[sourceLanguage] || 'English';
-        const targetLangName = languageMap[targetLanguage] || 'English';
-
         // Use Gemini for translation
         const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
         
@@ -132,9 +210,26 @@ app.post('/api/translate', async (req, res) => {
         const response = await result.response;
         const translatedText = response.text().trim();
 
-        res.json({ translatedText });
+        return translatedText;
     } catch (error) {
         console.error('Translation error:', error);
+        throw error;
+    }
+}
+
+// Translation API endpoint (for direct HTTP requests)
+app.post('/api/translate', async (req, res) => {
+    try {
+        const { text, sourceLanguage, targetLanguage } = req.body;
+
+        if (!text || !sourceLanguage || !targetLanguage) {
+            return res.status(400).json({ error: 'Missing required parameters' });
+        }
+
+        const translatedText = await translateText(text, sourceLanguage, targetLanguage);
+        res.json({ translatedText });
+    } catch (error) {
+        console.error('Translation API error:', error);
         res.status(500).json({ error: 'Translation failed', details: error.message });
     }
 });
@@ -164,4 +259,3 @@ server.listen(PORT, () => {
         console.log('✅ Gemini API configured');
     }
 });
-
